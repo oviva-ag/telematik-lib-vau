@@ -17,25 +17,17 @@
 package de.gematik.vau.lib.data;
 
 import java.security.PrivateKey;
-import lombok.AllArgsConstructor;
-import lombok.Data;
 
-@Data
-@AllArgsConstructor
-public class KdfMessage {
-
-  private final VauEccPublicKey ecdhCt;
-  private final PrivateKey ecdhPrivateKey; // for development only!
-  private final byte[] ecdhSharedSecret;
-  private final byte[] kyberCt;
-  private final byte[] kyberSharedSecret;
-
-  public KdfMessage(VauEccPublicKey ecdhCt, byte[] ecdhSharedSecret, byte[] kyberCt,
+public record KdfMessage(
+    VauEccPublicKey ecdhCt,
+    PrivateKey ecdhPrivateKey, // for development only!
+    byte[] ecdhSharedSecret,
+    byte[] kyberCt,
     byte[] kyberSharedSecret) {
-    this.ecdhCt = ecdhCt;
-    ecdhPrivateKey = null;
-    this.ecdhSharedSecret = ecdhSharedSecret;
-    this.kyberCt = kyberCt;
-    this.kyberSharedSecret = kyberSharedSecret;
+
+  public static KdfMessage fromPublicKey(
+      VauEccPublicKey ecdhCt, byte[] ecdhSharedSecret, byte[] kyberCt, byte[] kyberSharedSecret) {
+
+    return new KdfMessage(ecdhCt, null, ecdhSharedSecret, kyberCt, kyberSharedSecret);
   }
 }

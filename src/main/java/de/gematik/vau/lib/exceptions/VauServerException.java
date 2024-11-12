@@ -16,9 +16,9 @@
 
 package de.gematik.vau.lib.exceptions;
 
-public class VauServerException extends RuntimeException {
+public class VauServerException extends VauException {
 
-    public VauServerException(Exception e) {
-        super(e);
-    }
+  public VauServerException(String message, Throwable cause) {
+    super(message, cause);
+  }
 }

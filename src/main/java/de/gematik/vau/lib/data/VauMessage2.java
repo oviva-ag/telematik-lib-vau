@@ -26,10 +26,13 @@ public class VauMessage2 {
 
   @JsonProperty("MessageType")
   String messageType;
+
   @JsonProperty("ECDH_ct")
   VauEccPublicKey ecdhCt;
+
   @JsonProperty("Kyber768_ct")
   byte[] kyberCt;
+
   @JsonProperty("AEAD_ct")
   byte[] aeadCt;
 

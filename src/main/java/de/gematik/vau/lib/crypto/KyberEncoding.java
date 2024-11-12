@@ -17,13 +17,10 @@
 package de.gematik.vau.lib.crypto;
 
 import de.gematik.vau.lib.exceptions.VauKyberCryptoException;
+import de.gematik.vau.lib.util.ArrayUtils;
 import java.security.*;
 import javax.crypto.KeyGenerator;
 import javax.crypto.spec.SecretKeySpec;
-import lombok.AccessLevel;
-import lombok.NoArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.ArrayUtils;
 import org.bouncycastle.crypto.digests.SHA3Digest;
 import org.bouncycastle.crypto.digests.SHAKEDigest;
 import org.bouncycastle.jcajce.SecretKeyWithEncapsulation;
@@ -32,15 +29,16 @@ import org.bouncycastle.jcajce.spec.KEMGenerateSpec;
 import org.bouncycastle.pqc.jcajce.provider.BouncyCastlePQCProvider;
 import org.bouncycastle.pqc.jcajce.spec.KyberParameterSpec;
 
-@Slf4j
-@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class KyberEncoding {
   private static final SecureRandom SECURE_RANDOM = new SecureRandom();
   private static final String BC_PQC_PROVIDER = BouncyCastlePQCProvider.PROVIDER_NAME;
   private static final String ALGORITHM = "KYBER";
 
+  private KyberEncoding() {}
+
   /**
    * Generate a Kyber KeyPair
+   *
    * @return the KeyPair
    */
   public static KeyPair generateKeyPair() {
@@ -49,13 +47,16 @@ public class KyberEncoding {
       KeyPairGenerator kpg = KeyPairGenerator.getInstance(ALGORITHM, BC_PQC_PROVIDER);
       kpg.initialize(kyberParameterSpec, SECURE_RANDOM);
       return kpg.generateKeyPair();
-    } catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidAlgorithmParameterException e) {
+    } catch (NoSuchAlgorithmException
+        | NoSuchProviderException
+        | InvalidAlgorithmParameterException e) {
       throw new VauKyberCryptoException("Error while generating Kyber KeyPair", e);
     }
   }
 
   /**
    * Creates a Kyber Secret with encapsulation for a Kyber PublicKey
+   *
    * @param publicKey the PublicKey
    * @return the secret with encapsulation
    */
@@ -68,18 +69,25 @@ public class KyberEncoding {
       byte[] ct = bcResult.getEncapsulation();
       byte[] sharedSecret = bcResult.getEncoded();
 
-      // This trick is necessary since BouncyCastle does not implement Kyber versio 3.0.2, but rather the current draft
-      // The trick is derived from https://words.filippo.io/dispatches/mlkem768/#bonus-track-using-a-ml-kem-implementation-as-kyber-v3
-      byte[] resultSecret = ArrayUtils.subarray(shake256(ArrayUtils.addAll(sharedSecret, shaThree256(ct))), 0, 32);
+      // This trick is necessary since BouncyCastle does not implement Kyber versio 3.0.2, but
+      // rather the current draft
+      // The trick is derived from
+      // https://words.filippo.io/dispatches/mlkem768/#bonus-track-using-a-ml-kem-implementation-as-kyber-v3
+      byte[] resultSecret =
+          ArrayUtils.subarray(shake256(ArrayUtils.addAll(sharedSecret, shaThree256(ct))), 0, 32);
 
-      return new SecretKeyWithEncapsulation(new SecretKeySpec(resultSecret, bcResult.getAlgorithm()), ct);
-    } catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidAlgorithmParameterException e) {
+      return new SecretKeyWithEncapsulation(
+          new SecretKeySpec(resultSecret, bcResult.getAlgorithm()), ct);
+    } catch (NoSuchAlgorithmException
+        | NoSuchProviderException
+        | InvalidAlgorithmParameterException e) {
       throw new VauKyberCryptoException("Error while generating kyber encryption key", e);
     }
   }
 
   /**
    * Generates a shared secret using a Kyber PrivateKey and a binary encapsulated key
+   *
    * @param privateKey the private key
    * @param ct the encapsulated key
    * @return the shared secret
@@ -90,10 +98,15 @@ public class KyberEncoding {
       keyGen.init(new KEMExtractSpec(privateKey, ct, "AES"), SECURE_RANDOM);
       SecretKeyWithEncapsulation secEnc2 = (SecretKeyWithEncapsulation) keyGen.generateKey();
 
-      // This trick is necessary since BouncyCastle does not implement Kyber versio 3.0.2, but rather the current draft
-      // The trick is derived from https://words.filippo.io/dispatches/mlkem768/#bonus-track-using-a-ml-kem-implementation-as-kyber-v3
-      return ArrayUtils.subarray(shake256(ArrayUtils.addAll(secEnc2.getEncoded(), shaThree256(ct))), 0, 32);
-    } catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidAlgorithmParameterException e) {
+      // This trick is necessary since BouncyCastle does not implement Kyber versio 3.0.2, but
+      // rather the current draft
+      // The trick is derived from
+      // https://words.filippo.io/dispatches/mlkem768/#bonus-track-using-a-ml-kem-implementation-as-kyber-v3
+      return ArrayUtils.subarray(
+          shake256(ArrayUtils.addAll(secEnc2.getEncoded(), shaThree256(ct))), 0, 32);
+    } catch (NoSuchAlgorithmException
+        | NoSuchProviderException
+        | InvalidAlgorithmParameterException e) {
       throw new VauKyberCryptoException("Error while generating kyber decryption key", e);
     }
   }

@@ -16,9 +16,9 @@
 
 package de.gematik.vau.lib.exceptions;
 
-public class VauKeyConversionException extends RuntimeException {
+public class VauKeyConversionException extends VauException {
   public VauKeyConversionException(String message) {
-    super(message);
+    super(message, null);
   }
 
   public VauKeyConversionException(String message, Throwable cause) {

@@ -16,7 +16,7 @@
 
 package de.gematik.vau.lib.exceptions;
 
-public class VauKyberCryptoException extends RuntimeException {
+public class VauKyberCryptoException extends VauException {
 
   public VauKyberCryptoException(String message, Exception e) {
     super(message, e);

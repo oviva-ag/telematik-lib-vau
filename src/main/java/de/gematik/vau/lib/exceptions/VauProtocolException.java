@@ -16,13 +16,13 @@
 
 package de.gematik.vau.lib.exceptions;
 
-public class VauEncryptionException extends VauException {
+public class VauProtocolException extends VauException {
 
-  public VauEncryptionException(String message, Throwable t) {
-    super(message, t);
+  public VauProtocolException(String message, Throwable cause) {
+    super(message, cause);
   }
 
-  public VauEncryptionException(String message) {
-    super(message, null);
+  public VauProtocolException(String message) {
+    this(message, null);
   }
 }

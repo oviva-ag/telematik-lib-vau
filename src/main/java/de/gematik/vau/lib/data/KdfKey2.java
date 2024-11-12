@@ -16,13 +16,9 @@
 
 package de.gematik.vau.lib.data;
 
-import lombok.Value;
-
-@Value
-public class KdfKey2 {
-    byte[] clientToServerKeyConfirmation;
-    byte[] clientToServerAppData;
-    byte[] serverToClientKeyConfirmation;
-    byte[] serverToClientAppData;
-    byte[] keyId;
-}
+public record KdfKey2(
+    byte[] clientToServerKeyConfirmation,
+    byte[] clientToServerAppData,
+    byte[] serverToClientKeyConfirmation,
+    byte[] serverToClientAppData,
+    byte[] keyId) {}

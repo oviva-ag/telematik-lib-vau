@@ -16,13 +16,4 @@
 
 package de.gematik.vau.lib.data;
 
-import lombok.Getter;
-
-@Getter
-public class EncryptionVauKey {
-    private final byte[] appData;
-
-    public EncryptionVauKey(byte[] appData) {
-        this.appData = appData;
-    }
-}
+public record EncryptionVauKey(byte[] appData) {}

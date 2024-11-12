@@ -17,36 +17,22 @@
 package de.gematik.vau.lib.data;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.dataformat.cbor.databind.CBORMapper;
-import java.security.PrivateKey;
-import java.security.Signature;
-import lombok.*;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.codec.digest.DigestUtils;
+import de.gematik.vau.lib.exceptions.VauEncryptionException;
+import de.gematik.vau.lib.exceptions.VauProtocolException;
+import de.gematik.vau.lib.util.DigestUtils;
+import java.io.IOException;
+import java.security.*;
 
-@Value
-@NoArgsConstructor(force = true, access = AccessLevel.PRIVATE)
-@AllArgsConstructor
-@Builder
-@Slf4j
-public class SignedPublicVauKeys {
+public record SignedPublicVauKeys(
+    @JsonProperty("signed_pub_keys") byte[] signedPubKeys,
+    @JsonProperty("signature-ES256") byte[] signatureEs256,
+    @JsonProperty("cert_hash") byte[] certHash,
+    @JsonProperty("cdv") int cdv,
+    @JsonProperty("ocsp_response") byte[] ocspResponse) {
 
   private static final CBORMapper CBOR_MAPPER = new CBORMapper();
-
-  @JsonProperty("signed_pub_keys")
-  byte[] signedPubKeys;
-
-  @JsonProperty("signature-ES256")
-  byte[] signatureEs256;
-
-  @JsonProperty("cert_hash")
-  byte[] certHash;
-
-  @JsonProperty("cdv")
-  int cdv;
-
-  @JsonProperty("ocsp_response")
-  byte[] ocspResponse;
 
   /**
    * Builds the SignedPublicVauKeys using the input
@@ -59,7 +45,6 @@ public class SignedPublicVauKeys {
    * @param vauServerKeys public keys of server
    * @return the SignedPublicVauKeys
    */
-  @SneakyThrows
   public static SignedPublicVauKeys sign(
       byte[] serverAutCertificate,
       PrivateKey privateKey,
@@ -67,32 +52,82 @@ public class SignedPublicVauKeys {
       int cdv,
       VauPublicKeys vauServerKeys) {
 
-    final byte[] keyBytes = CBOR_MAPPER.writeValueAsBytes(vauServerKeys);
-    return SignedPublicVauKeys.builder()
-        .signedPubKeys(keyBytes)
-        .certHash(DigestUtils.sha256(serverAutCertificate))
-        .cdv(cdv)
-        .ocspResponse(ocspResponseAutCertificate)
-        .signatureEs256(generateEccSignature(keyBytes, privateKey))
-        .build();
+    try {
+      final byte[] keyBytes = CBOR_MAPPER.writeValueAsBytes(vauServerKeys);
+      return SignedPublicVauKeys.builder()
+          .signedPubKeys(keyBytes)
+          .certHash(DigestUtils.sha256(serverAutCertificate))
+          .cdv(cdv)
+          .ocspResponse(ocspResponseAutCertificate)
+          .signatureEs256(generateEccSignature(keyBytes, privateKey))
+          .build();
+    } catch (JsonProcessingException e) {
+      throw new VauEncryptionException("failed to encode and sign VAU keys", e);
+    }
   }
 
   private static byte[] generateEccSignature(byte[] tbsData, PrivateKey privateKey) {
     try {
-      Signature ecdsaSignature = Signature.getInstance("SHA256withPLAIN-ECDSA", "BC");
+      var ecdsaSignature = Signature.getInstance("SHA256withPLAIN-ECDSA", "BC");
       ecdsaSignature.initSign(privateKey);
       ecdsaSignature.update(tbsData);
       return ecdsaSignature.sign();
-    } catch (Exception e) {
-      throw new RuntimeException("Error while generating signature", e);
+    } catch (NoSuchAlgorithmException
+        | SignatureException
+        | NoSuchProviderException
+        | InvalidKeyException e) {
+      throw new VauEncryptionException("Error while generating signature", e);
     }
   }
 
   public VauPublicKeys extractVauKeys() {
     try {
       return CBOR_MAPPER.readValue(signedPubKeys, VauPublicKeys.class);
-    } catch (Exception e) {
-      throw new RuntimeException("Error while extracting VauKeys", e);
+    } catch (IllegalArgumentException | IOException e) {
+      throw new VauProtocolException("Error while extracting VauKeys", e);
+    }
+  }
+
+  public static Builder builder() {
+    return new Builder();
+  }
+
+  public static final class Builder {
+    private byte[] signedPubKeys;
+    private byte[] signatureEs256;
+    private byte[] certHash;
+    private int cdv;
+    private byte[] ocspResponse;
+
+    private Builder() {}
+
+    public Builder signedPubKeys(byte[] signedPubKeys) {
+      this.signedPubKeys = signedPubKeys;
+      return this;
+    }
+
+    public Builder signatureEs256(byte[] signatureEs256) {
+      this.signatureEs256 = signatureEs256;
+      return this;
+    }
+
+    public Builder certHash(byte[] certHash) {
+      this.certHash = certHash;
+      return this;
+    }
+
+    public Builder cdv(int cdv) {
+      this.cdv = cdv;
+      return this;
+    }
+
+    public Builder ocspResponse(byte[] ocspResponse) {
+      this.ocspResponse = ocspResponse;
+      return this;
+    }
+
+    public SignedPublicVauKeys build() {
+      return new SignedPublicVauKeys(signedPubKeys, signatureEs256, certHash, cdv, ocspResponse);
     }
   }
 }

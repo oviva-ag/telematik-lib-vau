@@ -18,22 +18,24 @@ package de.gematik.vau.lib.data;
 
 import static de.gematik.vau.lib.util.ArrayUtils.unionByteArrays;
 
+import de.gematik.vau.lib.util.ArrayUtils;
 import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.ArrayUtils;
 import org.bouncycastle.util.encoders.Hex;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Getter
-@Slf4j
 // A_24628 - encrypted VAU messsage with user data
 public class EncryptedVauMessage {
+
+  private final Logger log = LoggerFactory.getLogger(this.getClass());
 
   private final byte[] message;
 
   private final byte[] header;
-  private final byte   version;
-  private final byte   pu;
-  private final byte   request;
+  private final byte version;
+  private final byte pu;
+  private final byte request;
   private final byte[] requestCounter;
   private final byte[] keyId;
 
@@ -41,14 +43,17 @@ public class EncryptedVauMessage {
   private final byte[] ct;
 
   private final boolean isPu;
-  private static final int MINIMUM_CIPHERTEXT_LENGTH = 1 + 1 + 1 + 8 + 32 + 12 + 1 + 16; //A_24628
+  private static final int MINIMUM_CIPHERTEXT_LENGTH = 1 + 1 + 1 + 8 + 32 + 12 + 1 + 16; // A_24628
 
   public EncryptedVauMessage(byte[] message, boolean isPu) {
     this.isPu = isPu;
     if (message.length < MINIMUM_CIPHERTEXT_LENGTH) {
       throw new IllegalArgumentException(
-          "Invalid ciphertext length. Needs to be at least " + MINIMUM_CIPHERTEXT_LENGTH +
-              " bytes, but we received " + message.length + " bytes!");
+          "Invalid ciphertext length. Needs to be at least "
+              + MINIMUM_CIPHERTEXT_LENGTH
+              + " bytes, but we received "
+              + message.length
+              + " bytes!");
     }
 
     this.message = message;
@@ -77,31 +82,29 @@ public class EncryptedVauMessage {
   public void logAsTrace(byte[] serverSecretKey) {
     log.trace(
         """
-        trying to decrypt:
-              Complete message     : {}
-              Message size (Bytes) : {}
-              Complete header      : {}
-              Key to decrypt (K2_c2s_app_data): {}
-              -------------------------------
-              Version  (1 Byte): {}
-              PU       (1 Byte): {}
-              Request  (1 Byte): {}
-              Counter  (8 Byte): {}
-              KeyId   (32 Byte): {}
-              IV      (12 Byte): {}
-              CT + GMAC        : {}
-        """,
+                        trying to decrypt:
+                              Complete message     : {}
+                              Message size (Bytes) : {}
+                              Complete header      : {}
+                              Key to decrypt (K2_c2s_app_data): {}
+                              -------------------------------
+                              Version  (1 Byte): {}
+                              PU       (1 Byte): {}
+                              Request  (1 Byte): {}
+                              Counter  (8 Byte): {}
+                              KeyId   (32 Byte): {}
+                              IV      (12 Byte): {}
+                              CT + GMAC        : {}
+                        """,
         Hex.toHexString(message),
         message.length,
         Hex.toHexString(header),
         Hex.toHexString(serverSecretKey),
-
         Hex.toHexString(unionByteArrays(version)),
         Hex.toHexString(unionByteArrays(pu)),
         Hex.toHexString(unionByteArrays(request)),
         Hex.toHexString(requestCounter),
         Hex.toHexString(keyId),
-
         Hex.toHexString(iv),
         Hex.toHexString(ct));
   }

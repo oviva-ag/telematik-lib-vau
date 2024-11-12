@@ -18,24 +18,26 @@ package de.gematik.vau.lib.util;
 
 import java.util.List;
 import java.util.stream.Stream;
-import lombok.AccessLevel;
-import lombok.NoArgsConstructor;
 
-@NoArgsConstructor(access = AccessLevel.PRIVATE)
+// mostly borrowed from apache-commons
 public class ArrayUtils {
 
+  private ArrayUtils() {}
+
   public static byte[] unionByteArrays(Object... args) {
-    final List<byte[]> byteArrayList = Stream.of(args)
-      .map(arg -> {
-        if (arg instanceof byte[] array) {
-          return array;
-        } else if (arg instanceof Byte b) {
-          return new byte[]{b};
-        } else {
-          throw new RuntimeException("Invalid type " + arg.getClass().getSimpleName());
-        }
-      })
-      .toList();
+    final List<byte[]> byteArrayList =
+        Stream.of(args)
+            .map(
+                arg -> {
+                  if (arg instanceof byte[] array) {
+                    return array;
+                  } else if (arg instanceof Byte b) {
+                    return new byte[] {b};
+                  } else {
+                    throw new RuntimeException("Invalid type " + arg.getClass().getSimpleName());
+                  }
+                })
+            .toList();
 
     int totalLength = byteArrayList.stream().mapToInt(array -> array.length).sum();
     byte[] result = new byte[totalLength];
@@ -45,5 +47,39 @@ public class ArrayUtils {
       offset += array.length;
     }
     return result;
+  }
+
+  public static byte[] addAll(byte[] array1, byte... array2) {
+    if (array1 == null) {
+      return clone(array2);
+    } else if (array2 == null) {
+      return clone(array1);
+    } else {
+      byte[] joinedArray = new byte[array1.length + array2.length];
+      System.arraycopy(array1, 0, joinedArray, 0, array1.length);
+      System.arraycopy(array2, 0, joinedArray, array1.length, array2.length);
+      return joinedArray;
+    }
+  }
+
+  public static byte[] clone(final byte[] array) {
+    return array != null ? array.clone() : null;
+  }
+
+  public static byte[] subarray(
+      final byte[] array, int startIndexInclusive, int endIndexExclusive) {
+    if (array == null) {
+      return null;
+    }
+    startIndexInclusive = Math.max(0, startIndexInclusive);
+    endIndexExclusive = Math.min(endIndexExclusive, array.length);
+    final int newSize = endIndexExclusive - startIndexInclusive;
+    if (newSize <= 0) {
+      return new byte[0];
+    }
+
+    var dst = new byte[newSize];
+    System.arraycopy(array, startIndexInclusive, dst, 0, newSize);
+    return dst;
   }
 }

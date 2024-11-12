@@ -27,10 +27,13 @@ public class VauMessage3InnerLayer {
 
   @JsonProperty("ECDH_ct")
   VauEccPublicKey ecdhCt;
+
   @JsonProperty("Kyber768_ct")
   byte[] kyberCt;
+
   @JsonProperty("ERP")
   boolean erp;
+
   @JsonProperty("ESO")
   boolean eso;
 }

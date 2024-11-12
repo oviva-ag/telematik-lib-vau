@@ -22,13 +22,11 @@ import static org.mockito.Mockito.mockStatic;
 
 import java.security.NoSuchAlgorithmException;
 import javax.crypto.Cipher;
-import lombok.SneakyThrows;
 import org.junit.jupiter.api.Test;
 
 class KEMTest {
 
   @Test
-  @SneakyThrows
   void encryptAeadThrowingIllegalArgumentException() {
     var CipherMock = mockStatic(Cipher.class);
     CipherMock.when(() -> Cipher.getInstance(anyString()))

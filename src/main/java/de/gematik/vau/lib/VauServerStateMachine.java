@@ -18,32 +18,29 @@ package de.gematik.vau.lib;
 
 import de.gematik.vau.lib.crypto.KEM;
 import de.gematik.vau.lib.data.*;
-import de.gematik.vau.lib.exceptions.VauServerException;
-import lombok.Getter;
-import lombok.SneakyThrows;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.codec.digest.DigestUtils;
-import org.apache.commons.lang3.ArrayUtils;
-import org.bouncycastle.util.encoders.Hex;
-
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.spec.InvalidKeySpecException;
+import de.gematik.vau.lib.exceptions.VauProtocolException;
+import de.gematik.vau.lib.util.ArrayUtils;
+import de.gematik.vau.lib.util.DigestUtils;
+import java.io.IOException;
 import java.util.Arrays;
+import lombok.Getter;
+import org.bouncycastle.util.encoders.Hex;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
- * State machine for the VauServer. An instance of this class is created for each connection. It handles the handshake
- * phase and can then be used to send and receive encrytped messages.
+ * State machine for the VauServer. An instance of this class is created for each connection. It
+ * handles the handshake phase and can then be used to send and receive encrytped messages.
  */
-@Slf4j
 @Getter
 public class VauServerStateMachine extends AbstractVauStateMachine {
 
+  private final Logger log = LoggerFactory.getLogger(this.getClass());
+
   private final SignedPublicVauKeys signedPublicVauKeys;
   private final EccKyberKeyPair serverVauKeys;
-  private byte[] c2s; //S_K1_c2s
-  private byte[] s2c; //S_K1_s2c
+  private byte[] c2s; // S_K1_c2s
+  private byte[] s2c; // S_K1_s2c
   private KdfMessage kemResult1;
   private KdfMessage kemResult2;
   private byte[] serverTranscript;
@@ -52,14 +49,14 @@ public class VauServerStateMachine extends AbstractVauStateMachine {
   private static final int EXPIRATION_DAYS = 30;
 
   public VauServerStateMachine(
-          SignedPublicVauKeys vauKeys, EccKyberKeyPair kyberKeys, boolean isPu) {
+      SignedPublicVauKeys vauKeys, EccKyberKeyPair kyberKeys, boolean isPu) {
     super(isPu);
 
-    int iat = vauKeys.extractVauKeys().getIat();
-    int exp = vauKeys.extractVauKeys().getExp();
+    int iat = vauKeys.extractVauKeys().iat();
+    int exp = vauKeys.extractVauKeys().exp();
     if (exp - iat > EXPIRATION_DAYS * 60 * 60 * 24) {
       throw new IllegalArgumentException(
-              "Dates of initialization and expiration of server keys can be only up to 30 days apart.");
+          "Dates of initialization and expiration of server keys can be only up to 30 days apart.");
     }
 
     this.signedPublicVauKeys = vauKeys;
@@ -67,56 +64,63 @@ public class VauServerStateMachine extends AbstractVauStateMachine {
   }
 
   public VauServerStateMachine(
-          SignedPublicVauKeys signedPublicVauKeys, EccKyberKeyPair serverVauKeys) {
+      SignedPublicVauKeys signedPublicVauKeys, EccKyberKeyPair serverVauKeys) {
     this(signedPublicVauKeys, serverVauKeys, false);
   }
 
   /**
    * Uses decoded Message to create Handshake Message 2 or 4
+   *
    * @param encodedMessage CBOR decoded Message 1 or 3
    * @return CBOR decoded Message 2 or 4
    */
-  @SneakyThrows
   public byte[] receiveMessage(byte[] encodedMessage) {
-    checkCertificateExpired(signedPublicVauKeys.extractVauKeys().getExp());
+    checkCertificateExpired(signedPublicVauKeys.extractVauKeys().exp());
 
-    Object message = decodeCborMessageToClass(encodedMessage);
-    if (message instanceof VauMessage1 message1) {
-      return receiveMessage1(message1, encodedMessage);
-    } else if (message instanceof VauMessage3 message3) {
-      return receiveMessage3(message3, encodedMessage);
-    } else {
-      throw new UnsupportedOperationException("Message type not supported");
+    try {
+      Object message = decodeCborMessageToClass(encodedMessage);
+      if (message instanceof VauMessage1 message1) {
+        return receiveMessage1(message1, encodedMessage);
+      } else if (message instanceof VauMessage3 message3) {
+        return receiveMessage3(message3, encodedMessage);
+      } else {
+        throw new UnsupportedOperationException("Message type not supported");
+      }
+    } catch (IOException e) {
+      throw new VauProtocolException("failed to pares CBOR message", e);
     }
   }
 
   /**
-   * Handshake Message 2: takes public keys from Message 1 and calculates shared secrets in order to generate
-   * server-to-client and client-to-server keys; creates Message 2 with aead encrypted public key and
-   * the ciphertexts, which are generated using the client PublicKeys
+   * Handshake Message 2: takes public keys from Message 1 and calculates shared secrets in order to
+   * generate server-to-client and client-to-server keys; creates Message 2 with aead encrypted
+   * public key and the ciphertexts, which are generated using the client PublicKeys
+   *
    * @param vauMessage1 Message 1 from Client with the remote PublicKeys
    * @param message1Encoded CBOR encoded Message 1
    * @return Message 2 with aead encrypted publicKey and the ciphertexts
    */
-  @SneakyThrows
   private byte[] receiveMessage1(VauMessage1 vauMessage1, byte[] message1Encoded) {
     serverTranscript = message1Encoded;
     verifyClientMessageIsWellFormed(vauMessage1);
 
-    kemResult1 = KEM.encapsulateMessage(vauMessage1.getEcdhPublicKey().toEcPublicKey(),
-      vauMessage1.toKyberPublicKey());
+    kemResult1 =
+        KEM.encapsulateMessage(
+            vauMessage1.ecdhPublicKey().toEcPublicKey(), vauMessage1.kyberPublicKey());
     if (log.isTraceEnabled()) {
-      log.trace("ecdh_shared_secret: (hexdump) {}", Hex.toHexString(kemResult1.getEcdhSharedSecret()));
-      log.trace("Kyber768_shared_secret: (hexdump) {}", Hex.toHexString(kemResult1.getKyberSharedSecret()));
+      log.trace("ecdh_shared_secret: (hexdump) {}", Hex.toHexString(kemResult1.ecdhSharedSecret()));
+      log.trace(
+          "Kyber768_shared_secret: (hexdump) {}", Hex.toHexString(kemResult1.kyberSharedSecret()));
     }
     KdfKey1 kdfServerKey1 = KEM.kdf(kemResult1);
-    c2s = kdfServerKey1.getClientToServer();
-    s2c = kdfServerKey1.getServerToClient();
+    c2s = kdfServerKey1.clientToServer();
+    s2c = kdfServerKey1.serverToClient();
 
     byte[] encodedSignedPublicVauKeys = encodeUsingCbor(signedPublicVauKeys);
-    byte[] aeadCiphertextMessage2 = KEM.encryptAead(kdfServerKey1.getServerToClient(),
-            encodedSignedPublicVauKeys);
-    VauMessage2 message2 = new VauMessage2(kemResult1.getEcdhCt(), kemResult1.getKyberCt(), aeadCiphertextMessage2);
+    byte[] aeadCiphertextMessage2 =
+        KEM.encryptAead(kdfServerKey1.serverToClient(), encodedSignedPublicVauKeys);
+    VauMessage2 message2 =
+        new VauMessage2(kemResult1.ecdhCt(), kemResult1.kyberCt(), aeadCiphertextMessage2);
     log.debug("Generated message1: {}", Hex.toHexString(message1Encoded));
     byte[] message2Encoded = encodeUsingCbor(message2);
     serverTranscript = ArrayUtils.addAll(serverTranscript, message2Encoded);
@@ -124,49 +128,52 @@ public class VauServerStateMachine extends AbstractVauStateMachine {
   }
 
   /**
-   * Handshake Message 4: uses Message3 from Client; aead decrypts the kem certificates; these are then used to
-   * create the same KdfKey2 as the client did when receiving message 2. In order to verify that both keys are identical,
-   * the client hash is deciphered with the newly generated key and compared with the hashed server transcript.
-   * The aead encrypted server hash is then returned in Message 4
-   * @param vauMessage3 Message 3 from client, containing aead encrypted kem certificates and client hash
+   * Handshake Message 4: uses Message3 from Client; aead decrypts the kem certificates; these are
+   * then used to create the same KdfKey2 as the client did when receiving message 2. In order to
+   * verify that both keys are identical, the client hash is deciphered with the newly generated key
+   * and compared with the hashed server transcript. The aead encrypted server hash is then returned
+   * in Message 4
+   *
+   * @param vauMessage3 Message 3 from client, containing aead encrypted kem certificates and client
+   *     hash
    * @param message3Encoded Message 3 CBOR encoded
    * @return CBOR decoded Message 4 containing the aead encrypted server hash
    */
-  @SneakyThrows
   private byte[] receiveMessage3(VauMessage3 vauMessage3, byte[] message3Encoded) {
+    byte[] transcriptServerToCheck = ArrayUtils.addAll(serverTranscript, vauMessage3.getAeadCt());
+    serverTranscript = ArrayUtils.addAll(serverTranscript, message3Encoded);
+
+    byte[] kemCertificatesEncoded = KEM.decryptAead(c2s, vauMessage3.getAeadCt());
+
+    VauMessage3InnerLayer kemCertificates;
     try {
-      byte[] transcriptServerToCheck = ArrayUtils.addAll(serverTranscript, vauMessage3.getAeadCt());
-      serverTranscript = ArrayUtils.addAll(serverTranscript, message3Encoded);
-
-      byte[] kemCertificatesEncoded = KEM.decryptAead(c2s, vauMessage3.getAeadCt());
-
-      VauMessage3InnerLayer kemCertificates;
-      try {
-        kemCertificates = decodeCborMessageToClass(kemCertificatesEncoded, VauMessage3InnerLayer.class);
-      } catch (Exception e) {
-        throw new IllegalArgumentException("Could not CBOR decode KEM certificates (inner layer of message 3) when receiving it at client. " + e.getMessage());
-      }
-
-      kemResult2 = KEM.decapsulateMessages(kemCertificates, serverVauKeys);
-      serverKey2 = KEM.kdf(kemResult1, kemResult2);
-      setEncryptionVauKey(new EncryptionVauKey(serverKey2.getServerToClientAppData()));
-      setDecryptionVauKey(serverKey2.getClientToServerAppData());
-      setKeyId(serverKey2.getKeyId());
-      byte[] clientTranscriptHash = KEM.decryptAead(serverKey2.getClientToServerKeyConfirmation(), vauMessage3.getAeadCtKeyKonfirmation());
-
-      byte[] clientVauHashCalculation = DigestUtils.sha256(transcriptServerToCheck);
-
-      if (!Arrays.equals(clientTranscriptHash, clientVauHashCalculation)) {
-        throw new InvalidKeyException("Client transcript hash and vau calculation do not equal.");
-      }
-      byte[] transcriptServerHash = DigestUtils.sha256(serverTranscript);
-      byte[] aeadCiphertextMessage4KeyKonfirmation = KEM.encryptAead(serverKey2.getServerToClientKeyConfirmation(), transcriptServerHash);
-      VauMessage4 message4 = new VauMessage4("M4", aeadCiphertextMessage4KeyKonfirmation);
-      return encodeUsingCbor(message4);
+      kemCertificates =
+          decodeCborMessageToClass(kemCertificatesEncoded, VauMessage3InnerLayer.class);
+    } catch (Exception e) {
+      throw new IllegalArgumentException(
+          "Could not CBOR decode KEM certificates (inner layer of message 3) when receiving it at client. "
+              + e.getMessage());
     }
-    catch (Exception e) {
-      throw new VauServerException(e);
+
+    kemResult2 = KEM.decapsulateMessages(kemCertificates, serverVauKeys);
+    serverKey2 = KEM.kdf(kemResult1, kemResult2);
+    setEncryptionVauKey(new EncryptionVauKey(serverKey2.serverToClientAppData()));
+    setDecryptionVauKey(serverKey2.clientToServerAppData());
+    setKeyId(serverKey2.keyId());
+    byte[] clientTranscriptHash =
+        KEM.decryptAead(
+            serverKey2.clientToServerKeyConfirmation(), vauMessage3.getAeadCtKeyKonfirmation());
+
+    byte[] clientVauHashCalculation = DigestUtils.sha256(transcriptServerToCheck);
+
+    if (!Arrays.equals(clientTranscriptHash, clientVauHashCalculation)) {
+      throw new VauProtocolException("Client transcript hash and vau calculation do not equal.");
     }
+    byte[] transcriptServerHash = DigestUtils.sha256(serverTranscript);
+    byte[] aeadCiphertextMessage4KeyKonfirmation =
+        KEM.encryptAead(serverKey2.serverToClientKeyConfirmation(), transcriptServerHash);
+    VauMessage4 message4 = new VauMessage4("M4", aeadCiphertextMessage4KeyKonfirmation);
+    return encodeUsingCbor(message4);
   }
 
   @Override
@@ -187,24 +194,27 @@ public class VauServerStateMachine extends AbstractVauStateMachine {
   @Override
   protected void checkRequestByte(byte reqByte) {
     if (reqByte != 1) {
-      throw new UnsupportedOperationException("Request byte was unexpected. Expected 1, but got " + reqByte);
+      throw new UnsupportedOperationException(
+          "Request byte was unexpected. Expected 1, but got " + reqByte);
     }
   }
 
   @Override
   protected void checkRequestKeyId(byte[] keyId) {
-    if (!Arrays.equals(serverKey2.getKeyId(), keyId)) {
-      throw new IllegalArgumentException("Key ID in the header " + Hex.toHexString(keyId) +
-          " does not equals " + Hex.toHexString(serverKey2.getKeyId()) + " stored on server side");
+    if (!Arrays.equals(serverKey2.keyId(), keyId)) {
+      throw new IllegalArgumentException(
+          "Key ID in the header "
+              + Hex.toHexString(keyId)
+              + " does not equals "
+              + Hex.toHexString(serverKey2.keyId())
+              + " stored on server side");
     }
   }
 
   private void verifyClientMessageIsWellFormed(VauMessage1 vauMessage1) {
-    verifyEccPublicKey(vauMessage1.getEcdhPublicKey());
-    try {
-      vauMessage1.toKyberPublicKey();
-    } catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidKeySpecException e) {
-      throw new IllegalArgumentException("Kyber Public Key Bytes in VAU Message 1 are not well formed.", e);
-    }
+    verifyEccPublicKey(vauMessage1.ecdhPublicKey());
+
+    // indirectly verifies we can read the key
+    vauMessage1.kyberPublicKey();
   }
 }

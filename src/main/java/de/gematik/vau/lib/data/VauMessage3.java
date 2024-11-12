@@ -26,8 +26,10 @@ public class VauMessage3 {
 
   @JsonProperty("MessageType")
   String messageType;
+
   @JsonProperty("AEAD_ct")
   byte[] aeadCt;
+
   @JsonProperty("AEAD_ct_key_confirmation")
   byte[] aeadCtKeyKonfirmation;
 }

@@ -23,8 +23,9 @@ import lombok.*;
 @NoArgsConstructor(force = true, access = AccessLevel.PRIVATE)
 @AllArgsConstructor
 public class VauMessage4 {
-    @JsonProperty("MessageType")
-    String messageType;
-    @JsonProperty("AEAD_ct_key_confirmation")
-    byte[] aeadCtKeyKonfirmation;
+  @JsonProperty("MessageType")
+  String messageType;
+
+  @JsonProperty("AEAD_ct_key_confirmation")
+  byte[] aeadCtKeyKonfirmation;
 }

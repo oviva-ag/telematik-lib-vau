@@ -16,35 +16,32 @@
 
 package de.gematik.vau.lib.data;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import de.gematik.vau.lib.crypto.KyberKeys;
+import java.security.PublicKey;
 import java.time.Duration;
 import java.util.Date;
-import lombok.EqualsAndHashCode;
-import lombok.Value;
+import org.bouncycastle.jce.interfaces.ECPublicKey;
 
-@Value
-@EqualsAndHashCode(callSuper = true)
-public class VauPublicKeys extends VauBasicPublicKey {
+public record VauPublicKeys(
+    @JsonProperty("iat") int iat,
+    @JsonProperty("exp") int exp,
+    @JsonProperty("comment") String comment,
+    @JsonProperty("ECDH_PK") VauEccPublicKey ecdhPublicKey,
+    @JsonProperty("Kyber768_PK") byte[] kyberPublicKeyBytes) {
 
-  int iat;
-  int exp;
-  String comment;
+  public static VauPublicKeys withValidity(
+      EccKyberKeyPair eccKyberKeyPair, String comment, Duration validity) {
+    var iat = (int) new Date().toInstant().getEpochSecond();
+    var exp = (int) (iat + validity.toSeconds());
 
-  public VauPublicKeys(EccKyberKeyPair eccKyberKeyPair, String comment, Duration validity) {
-    super(eccKyberKeyPair);
-    iat = (int) new Date().toInstant().getEpochSecond();
-    exp = (int) (iat + validity.toSeconds());
-    this.comment = comment;
+    var ecdhPublicKey = new VauEccPublicKey((ECPublicKey) eccKyberKeyPair.eccKeyPair().getPublic());
+    var kyberPublicKeyBytes =
+        KyberKeys.extractCompactKyberPublicKey(eccKyberKeyPair.kyberKeyPair());
+    return new VauPublicKeys(iat, exp, comment, ecdhPublicKey, kyberPublicKeyBytes);
   }
 
-  @JsonCreator
-  public VauPublicKeys(@JsonProperty("ECDH_PK") VauEccPublicKey ecdhPublicKey,
-    @JsonProperty("Kyber768_PK") byte[] kyberPublicKeyBytes,
-    @JsonProperty("iat") int iat, @JsonProperty("exp") int exp, @JsonProperty("comment") String comment) {
-    super(ecdhPublicKey, kyberPublicKeyBytes);
-    this.iat = iat;
-    this.exp = exp;
-    this.comment = comment;
+  public PublicKey kyberPublicKey() {
+    return KyberKeys.decodeKyberPublicKey(kyberPublicKeyBytes);
   }
 }

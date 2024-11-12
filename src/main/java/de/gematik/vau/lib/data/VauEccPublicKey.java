@@ -28,8 +28,10 @@ import org.bouncycastle.jce.interfaces.ECPublicKey;
 public class VauEccPublicKey {
 
   String crv;
+
   @JsonDeserialize(using = ForceByteArrayDeserializer.class)
   byte[] x;
+
   @JsonDeserialize(using = ForceByteArrayDeserializer.class)
   byte[] y;
 
@@ -40,14 +42,15 @@ public class VauEccPublicKey {
   }
 
   @JsonCreator
-  public VauEccPublicKey(@JsonProperty("crv") String crv, @JsonProperty("x") byte[] x, @JsonProperty("y") byte[] y) {
+  public VauEccPublicKey(
+      @JsonProperty("crv") String crv, @JsonProperty("x") byte[] x, @JsonProperty("y") byte[] y) {
     this.crv = crv;
     this.x = x;
     this.y = y;
   }
 
   public ECPublicKey toEcPublicKey() {
-    return EllipticCurve.getPublicKeyFromCoordinates(new BigInteger(1, x, 0, x.length),
-      new BigInteger(1, y, 0, y.length));
+    return EllipticCurve.getPublicKeyFromCoordinates(
+        new BigInteger(1, x, 0, x.length), new BigInteger(1, y, 0, y.length));
   }
 }

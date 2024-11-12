@@ -16,48 +16,56 @@
 
 package de.gematik.vau.lib.data;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.dataformat.cbor.databind.CBORMapper;
 import de.gematik.vau.lib.crypto.EllipticCurve;
 import de.gematik.vau.lib.crypto.KyberEncoding;
 import de.gematik.vau.lib.util.ArrayUtils;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyFactory;
 import java.security.KeyPair;
+import java.security.NoSuchAlgorithmException;
+import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
-import lombok.*;
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPrivateKey;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.bouncycastle.jce.spec.ECParameterSpec;
 import org.bouncycastle.jce.spec.ECPublicKeySpec;
-import org.bouncycastle.math.ec.ECPoint;
 import org.bouncycastle.pqc.jcajce.provider.BouncyCastlePQCProvider;
 import org.bouncycastle.util.encoders.Hex;
 
-@Data
 public class EccKyberKeyPair {
 
   private static final BouncyCastleProvider BOUNCY_CASTLE_PROVIDER = new BouncyCastleProvider();
 
-  protected static final byte[] KYBER_PUBLIC_KEY_ENCODING_HEADER = Hex.decode(
-    "308204B4300D060B2B0601040181B01A050602038204A100");
-  protected static final byte[] KYBER_PRIVATE_KEY_ENCODING_HEADER = Hex.decode(
-    "3082097A020100300D060B2B0601040181B01A0506020482096404820960");
+  protected static final byte[] KYBER_PUBLIC_KEY_ENCODING_HEADER =
+      Hex.decode("308204B4300D060B2B0601040181B01A050602038204A100");
+  protected static final byte[] KYBER_PRIVATE_KEY_ENCODING_HEADER =
+      Hex.decode("3082097A020100300D060B2B0601040181B01A0506020482096404820960");
 
-  @JsonIgnore
   private final KeyPair eccKeyPair;
-  @JsonIgnore
   private final KeyPair kyberKeyPair;
+
+  public EccKyberKeyPair(KeyPair eccKeyPair, KeyPair kyberKeyPair) {
+    this.eccKeyPair = eccKeyPair;
+    this.kyberKeyPair = kyberKeyPair;
+  }
+
+  public KeyPair eccKeyPair() {
+    return eccKeyPair;
+  }
+
+  public KeyPair kyberKeyPair() {
+    return kyberKeyPair;
+  }
 
   /**
    * Generates a random ECDH key pair and a random Kyber-768 key pair
    *
    * @return EccKyberKeyPair, which is the object containing both key pairs
    */
-  @SneakyThrows
   public static EccKyberKeyPair generateRandom() {
     KeyPair ecdhKeyPair = EllipticCurve.generateKeyPair();
     KeyPair kybKeyPair = KyberEncoding.generateKeyPair();
@@ -65,48 +73,58 @@ public class EccKyberKeyPair {
     return new EccKyberKeyPair(ecdhKeyPair, kybKeyPair);
   }
 
-  @SneakyThrows
   public static EccKyberKeyPair readFromFile(Path file) {
-    final CBORMapper cborMapper = new CBORMapper();
-    final JsonNode tree = cborMapper.readTree(Files.readAllBytes(file));
+    try {
+      final CBORMapper cborMapper = new CBORMapper();
+      final JsonNode tree = cborMapper.readTree(Files.readAllBytes(file));
 
-    final byte[] eccPrivateKeyData = tree.get("ECDH_PrivKey").binaryValue();
-    final byte[] kyberPublicKeyData = tree.get("Kyber768_PK").binaryValue();
-    final byte[] kyberPrivateKeyData = tree.get("Kyber768_PrivKey").binaryValue();
-    var eccKeyPair = readEcdsaKeypairFromPkcs8Pem(eccPrivateKeyData);
-    var kyberKeyPair = readKyberKeypairFromPkcs8Pem(kyberPrivateKeyData, kyberPublicKeyData);
-    return new EccKyberKeyPair(eccKeyPair, kyberKeyPair);
+      final byte[] eccPrivateKeyData = tree.get("ECDH_PrivKey").binaryValue();
+      final byte[] kyberPublicKeyData = tree.get("Kyber768_PK").binaryValue();
+      final byte[] kyberPrivateKeyData = tree.get("Kyber768_PrivKey").binaryValue();
+      var eccKeyPair = readEcdsaKeypairFromPkcs8Pem(eccPrivateKeyData);
+      var kyberKeyPair = readKyberKeypairFromPkcs8Pem(kyberPrivateKeyData, kyberPublicKeyData);
+      return new EccKyberKeyPair(eccKeyPair, kyberKeyPair);
+    } catch (IOException e) {
+      throw new IllegalArgumentException("cannot read file %s".formatted(file), e);
+    }
   }
 
-  @SneakyThrows
-  private static KeyPair readKyberKeypairFromPkcs8Pem(byte[] kyberPrivateKeyData, byte[] kyberPublicKeyData) {
-    final String keyType = "KYBER";
-    KeyFactory keyFactory = KeyFactory.getInstance(keyType, new BouncyCastlePQCProvider());
+  private static KeyPair readKyberKeypairFromPkcs8Pem(
+      byte[] kyberPrivateKeyData, byte[] kyberPublicKeyData) {
+    try {
+      final String keyType = "KYBER";
+      KeyFactory keyFactory = KeyFactory.getInstance(keyType, new BouncyCastlePQCProvider());
 
-    X509EncodedKeySpec kyberPubKey = new X509EncodedKeySpec(
-      ArrayUtils.unionByteArrays(KYBER_PUBLIC_KEY_ENCODING_HEADER, kyberPublicKeyData),
-      keyType);
-    PKCS8EncodedKeySpec kyberPrivKey = new PKCS8EncodedKeySpec(
-      ArrayUtils.unionByteArrays(KYBER_PRIVATE_KEY_ENCODING_HEADER, kyberPrivateKeyData),
-      keyType);
+      X509EncodedKeySpec kyberPubKey =
+          new X509EncodedKeySpec(
+              ArrayUtils.unionByteArrays(KYBER_PUBLIC_KEY_ENCODING_HEADER, kyberPublicKeyData),
+              keyType);
+      PKCS8EncodedKeySpec kyberPrivKey =
+          new PKCS8EncodedKeySpec(
+              ArrayUtils.unionByteArrays(KYBER_PRIVATE_KEY_ENCODING_HEADER, kyberPrivateKeyData),
+              keyType);
 
-    return new KeyPair(
-      keyFactory.generatePublic(kyberPubKey),
-      keyFactory.generatePrivate(kyberPrivKey)
-    );
+      return new KeyPair(
+          keyFactory.generatePublic(kyberPubKey), keyFactory.generatePrivate(kyberPrivKey));
+    } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
+      throw new IllegalArgumentException("failed to read PEM kyber key", e);
+    }
   }
 
-  @SneakyThrows
   public static KeyPair readEcdsaKeypairFromPkcs8Pem(byte[] eccPrivateKeyData) {
-    KeyFactory factory = KeyFactory.getInstance("ECDSA", BOUNCY_CASTLE_PROVIDER);
-    PKCS8EncodedKeySpec privKeySpec = new PKCS8EncodedKeySpec(eccPrivateKeyData);
-    final BCECPrivateKey privateKey = (BCECPrivateKey) factory.generatePrivate(privKeySpec);
-    KeyFactory keyFactory = KeyFactory.getInstance("ECDSA", BOUNCY_CASTLE_PROVIDER);
+    try {
+      var factory = KeyFactory.getInstance("ECDSA", BOUNCY_CASTLE_PROVIDER);
+      var privKeySpec = new PKCS8EncodedKeySpec(eccPrivateKeyData);
+      final var privateKey = (BCECPrivateKey) factory.generatePrivate(privKeySpec);
+      var keyFactory = KeyFactory.getInstance("ECDSA", BOUNCY_CASTLE_PROVIDER);
 
-    ECParameterSpec ecSpec = privateKey.getParameters();
-    ECPoint q = ecSpec.getG().multiply(privateKey.getD());
+      var ecSpec = privateKey.getParameters();
+      var q = ecSpec.getG().multiply(privateKey.getD());
 
-    ECPublicKeySpec pubSpec = new ECPublicKeySpec(q, ecSpec);
-    return new KeyPair(keyFactory.generatePublic(pubSpec), privateKey);
+      var pubSpec = new ECPublicKeySpec(q, ecSpec);
+      return new KeyPair(keyFactory.generatePublic(pubSpec), privateKey);
+    } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
+      throw new IllegalArgumentException("failed to read PEM ECDSA key", e);
+    }
   }
 }

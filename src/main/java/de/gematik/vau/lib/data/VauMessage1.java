@@ -16,29 +16,23 @@
 
 package de.gematik.vau.lib.data;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.SneakyThrows;
+import de.gematik.vau.lib.crypto.KyberKeys;
+import java.security.PublicKey;
+import org.bouncycastle.jce.interfaces.ECPublicKey;
 
-@Getter
-@EqualsAndHashCode(callSuper = true)
-public class VauMessage1 extends VauBasicPublicKey {
+public record VauMessage1(
+    @JsonProperty("ECDH_PK") VauEccPublicKey ecdhPublicKey,
+    @JsonProperty("Kyber768_PK") byte[] kyberPublicKeyBytes,
+    @JsonProperty("MessageType") String messageType) {
 
-  @JsonProperty("MessageType")
-  private final String messageType;
-
-  @SneakyThrows
-  public VauMessage1(EccKyberKeyPair clientKey1) {
-    super(clientKey1);
-    messageType = "M1";
+  public static VauMessage1 fromClientKey(EccKyberKeyPair clientKey1) {
+    var ecdhPublicKey = new VauEccPublicKey((ECPublicKey) clientKey1.eccKeyPair().getPublic());
+    var kyberPublicKeyBytes = KyberKeys.extractCompactKyberPublicKey(clientKey1.kyberKeyPair());
+    return new VauMessage1(ecdhPublicKey, kyberPublicKeyBytes, "M1");
   }
 
-  @JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
-  public VauMessage1(@JsonProperty("ECDH_PK") VauEccPublicKey ecdhPublicKey,
-    @JsonProperty("Kyber768_PK") byte[] kyberPublicKey, @JsonProperty("MessageType") String messageType) {
-    super(ecdhPublicKey, kyberPublicKey);
-    this.messageType = messageType;
+  public PublicKey kyberPublicKey() {
+    return KyberKeys.decodeKyberPublicKey(kyberPublicKeyBytes);
   }
 }
