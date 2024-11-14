@@ -1,3 +1,6 @@
+> [!NOTE]
+> This is a fork of https://github.com/gematik/lib-vau
+
 # VAU Library (lib-vau)
 
 Dieses Repository dient als Beispielimplementierung in JAVA und implementiert den kryptografischen Teil der Spezifikation des VAU-Protokolls für ePA für alle ([gemSpec_Krypt Kaptiel 7](https://gemspec.gematik.de/docs/gemSpec/gemSpec_Krypt/latest/#7)). 

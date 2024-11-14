@@ -27,16 +27,23 @@ import de.gematik.vau.lib.VauServerStateMachine;
 import de.gematik.vau.lib.data.EccKyberKeyPair;
 import de.gematik.vau.lib.data.SignedPublicVauKeys;
 import de.gematik.vau.lib.data.VauPublicKeys;
+import de.gematik.vau.lib.exceptions.VauProtocolException;
 import de.gematik.vau.lib.util.ArrayUtils;
 import java.io.IOException;
 import java.io.StringWriter;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.security.*;
+import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.time.Duration;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.bouncycastle.asn1.ASN1Sequence;
@@ -57,6 +64,10 @@ import org.slf4j.LoggerFactory;
 
 class VauHandshakeTest {
 
+  // https://gemspec.gematik.de/docs/gemSpec/gemSpec_Krypt/latest/#A_24608
+  private static final int VAU_CID_MAX_BYTE_LENGTH = 200;
+  private static final Pattern VAU_CID_PATTERN = Pattern.compile("/[A-Za-z0-9-/]+");
+
   private static final int KYBER_768_BYTE_LENGTH = 1184;
   private static final String TGR_FILENAME = "target/vau3traffic.tgr";
 
@@ -73,6 +84,160 @@ class VauHandshakeTest {
   public void setUp() {
     final Logger logger = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
     logger.setLevel(Level.TRACE);
+  }
+
+  private HttpClient httpClient = HttpClient.newHttpClient();
+
+  @Test
+  void rise_RU() throws IOException, InterruptedException {
+
+    // https://gemspec.gematik.de/docs/gemSpec/gemSpec_Krypt/latest/#7.1
+
+    // https://github.com/gematik/lib-vau/issues/18
+    var url = URI.create("https://e4a-rt.deine-epa.de/VAU");
+
+    var client = new VauClientStateMachine();
+
+    // handshake - start
+    var msg1 = client.generateMessage1();
+    var msg2 = postMsg1(url, msg1);
+
+    var cid = msg2.cid();
+    validateCid(cid);
+
+    // https://gemspec.gematik.de/docs/gemSpec/gemSpec_Krypt/latest/#A_24623
+    var msg3 = client.receiveMessage2(msg2.body());
+
+    var sessionUrl = url.resolve(cid);
+
+    // https://gemspec.gematik.de/docs/gemSpec/gemSpec_Krypt/latest/#A_24623
+    var msg4 = post(sessionUrl, msg3);
+
+    client.receiveMessage4(msg4);
+
+    // handshake - end
+
+  }
+
+  private void validateCid(String cid) {
+    if (cid == null) {
+      throw new VauProtocolException("missing VAU-CID in handshake");
+    }
+    if (cid.length() > VAU_CID_MAX_BYTE_LENGTH) {
+      throw new VauProtocolException(
+          "invalid VAU-CID in handshake, too long %d > %d "
+              .formatted(cid.length(), VAU_CID_MAX_BYTE_LENGTH));
+    }
+    if (!VAU_CID_PATTERN.matcher(cid).matches()) {
+      throw new VauProtocolException("invalid VAU-CID in handshake: '%s'".formatted(cid));
+    }
+  }
+
+  private byte[] post(URI uri, byte[] body) throws IOException, InterruptedException {
+
+    var req =
+        HttpRequest.newBuilder(uri)
+            .POST(HttpRequest.BodyPublishers.ofByteArray(body))
+            .header("Content-Type", "application/cbor")
+            .build();
+
+    var res = httpClient.send(req, HttpResponse.BodyHandlers.ofByteArray());
+    if (res.statusCode() != 200) {
+      System.out.println(
+          """
+                    %s
+                    """.formatted(new String(res.body())));
+      throw new IllegalStateException("unexpected status %d != 200".formatted(res.statusCode()));
+    }
+
+    var vauCid = res.headers().firstValue("VAU-CID");
+    System.out.println(vauCid);
+
+    return res.body();
+  }
+
+  private Msg2 postMsg1(URI uri, byte[] body) throws IOException, InterruptedException {
+
+    var res = postCbor(uri, body);
+    var vauCid = res.headers().firstValue("VAU-CID");
+    return new Msg2(res.body(), vauCid.orElse(null));
+  }
+
+  record Msg2(byte[] body, String cid) {}
+
+  private HttpResponse<byte[]> postCbor(URI uri, byte[] body)
+      throws IOException, InterruptedException {
+
+    var req =
+        HttpRequest.newBuilder(uri)
+            .POST(HttpRequest.BodyPublishers.ofByteArray(body))
+            .header("Content-Type", "application/cbor")
+            .build();
+
+    var res = httpClient.send(req, HttpResponse.BodyHandlers.ofByteArray());
+    if (res.statusCode() != 200) {
+      throw new IllegalStateException("unexpected status %d != 200".formatted(res.statusCode()));
+    }
+
+    return res;
+  }
+
+  @Test
+  void testHandshake_simple() throws Exception {
+
+    var server = setupServer();
+    var client = new VauClientStateMachine();
+
+    // when: client -> server
+    var message1Encoded = client.generateMessage1();
+
+    var message2Encoded = server.receiveMessage(message1Encoded);
+
+    var message3Encoded = client.receiveMessage2(message2Encoded);
+
+    var message4Encoded = server.receiveMessage(message3Encoded);
+
+    client.receiveMessage4(message4Encoded);
+
+    var plaintextRequest = "Ping?";
+
+    var encryptedClientVauMessage = client.encryptVauMessage(plaintextRequest.getBytes());
+
+    var decryptedClientVauMessage = server.decryptVauMessage(encryptedClientVauMessage);
+
+    // then
+    assertThat(decryptedClientVauMessage).isEqualTo(plaintextRequest.getBytes());
+
+    // when: server -> client
+    var plaintextResponse = "Pong!";
+    var encryptedServerVauMessage = server.encryptVauMessage(plaintextResponse.getBytes());
+
+    var decryptedServerVauMessage = client.decryptVauMessage(encryptedServerVauMessage);
+
+    // then
+    assertThat(decryptedServerVauMessage).isEqualTo(plaintextResponse.getBytes());
+  }
+
+  private VauServerStateMachine setupServer()
+      throws NoSuchAlgorithmException, IOException, InvalidKeySpecException {
+
+    var keyFactory = KeyFactory.getInstance("EC");
+    var privateSpec =
+        new PKCS8EncodedKeySpec(Files.readAllBytes(Path.of("src/test/resources/vau-sig-key.der")));
+    var serverAutPrivateKey = keyFactory.generatePrivate(privateSpec);
+    var serverVauKeyPair =
+        EccKyberKeyPair.readFromFile(Path.of("src/test/resources/vau_server_keys.cbor"));
+    var serverVauKeys =
+        VauPublicKeys.withValidity(serverVauKeyPair, "VAU Server Keys", Duration.ofDays(30));
+    var signedPublicVauKeys =
+        SignedPublicVauKeys.sign(
+            Files.readAllBytes(Path.of("src/test/resources/vau_sig_cert.der")),
+            serverAutPrivateKey,
+            Files.readAllBytes(Path.of("src/test/resources/ocsp-response-vau-sig.der")),
+            1,
+            serverVauKeys);
+
+    return new VauServerStateMachine(signedPublicVauKeys, serverVauKeyPair);
   }
 
   @Test

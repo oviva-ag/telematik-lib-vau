@@ -20,7 +20,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import de.gematik.vau.lib.crypto.KyberKeys;
 import java.security.PublicKey;
 import java.time.Duration;
-import java.util.Date;
+import java.time.Instant;
 import org.bouncycastle.jce.interfaces.ECPublicKey;
 
 public record VauPublicKeys(
@@ -32,7 +32,7 @@ public record VauPublicKeys(
 
   public static VauPublicKeys withValidity(
       EccKyberKeyPair eccKyberKeyPair, String comment, Duration validity) {
-    var iat = (int) new Date().toInstant().getEpochSecond();
+    var iat = (int) Instant.now().getEpochSecond();
     var exp = (int) (iat + validity.toSeconds());
 
     var ecdhPublicKey = new VauEccPublicKey((ECPublicKey) eccKyberKeyPair.eccKeyPair().getPublic());

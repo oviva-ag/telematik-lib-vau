@@ -97,7 +97,7 @@ public class VauClientStateMachine extends AbstractVauStateMachine {
       signedPublicVauKeys =
           decodeCborMessageToClass(transferredSignedServerPublicKey, SignedPublicVauKeys.class);
     } catch (Exception e) {
-      throw new IllegalArgumentException(
+      throw new VauProtocolException(
           "Could not CBOR decode Signed Server Public Keys when receiving it at client.", e);
     }
 

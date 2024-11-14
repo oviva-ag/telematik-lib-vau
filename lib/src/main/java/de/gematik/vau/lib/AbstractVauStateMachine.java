@@ -86,7 +86,7 @@ public abstract class AbstractVauStateMachine {
   <T> T decodeCborMessageToClass(byte[] encodedMessage) throws IOException {
     final JsonNode tree = cborMapper.readTree(encodedMessage);
     if (!tree.has(MESSAGE_TYPE) || !tree.get(MESSAGE_TYPE).isTextual()) {
-      throw new UnsupportedOperationException("Message type not recognized");
+      throw new VauProtocolException("Message type not recognized");
     }
     return switch (tree.get(MESSAGE_TYPE).textValue()) {
       case "M1" -> cborMapper.readerFor(VauMessage1.class).readValue(encodedMessage);
@@ -94,7 +94,7 @@ public abstract class AbstractVauStateMachine {
       case "M3" -> cborMapper.readerFor(VauMessage3.class).readValue(encodedMessage);
       case "M4" -> cborMapper.readerFor(VauMessage4.class).readValue(encodedMessage);
       default ->
-          throw new UnsupportedOperationException(
+          throw new VauProtocolException(
               "Message type " + tree.get(MESSAGE_TYPE).textValue() + "not supported");
     };
   }

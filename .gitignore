@@ -3,3 +3,4 @@
 *.iml
 **/*.jar
 /jenkinsfiles/
+.DS_Store
