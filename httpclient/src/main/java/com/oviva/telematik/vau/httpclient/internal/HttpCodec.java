@@ -41,9 +41,10 @@ public class HttpCodec {
 
       var body = baos.toByteArray();
       if (body.length != headers.contentLength()) {
-        throw new HttpClient.HttpException(
-            "content-length '%d' != actual length '%d'"
-                .formatted(headers.contentLength(), body.length));
+        //FIXME: RISE does not honor this!!!
+//        throw new HttpClient.HttpException(
+//            "content-length '%d' != actual length '%d'"
+//                .formatted(headers.contentLength(), body.length));
       }
 
       return new HttpClient.Response(status, headers.all(), body);
@@ -128,7 +129,7 @@ public class HttpCodec {
 
     validateRequest(req);
 
-    var buf = ByteBuffer.allocate(256);
+    var buf = ByteBuffer.allocate(16 * 1024); // 2^14 = 16kb
 
     addRequestLine(buf, req.uri(), req.method());
     writeHeaders(buf, req);

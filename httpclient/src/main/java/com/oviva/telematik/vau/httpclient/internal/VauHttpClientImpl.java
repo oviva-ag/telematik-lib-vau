@@ -12,9 +12,9 @@ public class VauHttpClientImpl implements HttpClient {
   private static final Logger log = LoggerFactory.getLogger(VauHttpClientImpl.class);
 
   // A_24677 & A_22470
-  private final String X_USERAGENT = "Oviva/0.0.1";
+  private static final String X_USERAGENT = "Oviva/0.0.1";
 
-  private final Header X_USERAGENT_HEADER = new Header("X-UserAgent", X_USERAGENT);
+  private static final Header X_USERAGENT_HEADER = new Header("X-UserAgent", X_USERAGENT);
 
   private final Connection conn;
 

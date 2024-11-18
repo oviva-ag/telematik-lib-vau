@@ -1,13 +1,14 @@
 package com.oviva.telematik.vau.httpclient.internal;
 
 import com.oviva.telematik.vau.httpclient.HttpClient;
+import com.oviva.telematik.vau.httpclient.VauClientFactory;
 import de.gematik.vau.lib.VauClientStateMachine;
 import de.gematik.vau.lib.exceptions.VauProtocolException;
 import java.net.URI;
 import java.util.List;
 import java.util.regex.Pattern;
 
-public class ConnectionFactory {
+public class ConnectionFactory implements VauClientFactory {
 
   private static final String METHOD_POST = "POST";
 
@@ -17,10 +18,12 @@ public class ConnectionFactory {
 
   private final HttpClient outerClient;
   private final boolean isPu;
+  private final URI vauUri;
 
-  public ConnectionFactory(HttpClient outerClient, boolean isPu) {
+  public ConnectionFactory(HttpClient outerClient, boolean isPu, URI vauUri) {
     this.outerClient = outerClient;
     this.isPu = isPu;
+    this.vauUri = vauUri;
   }
 
   /**
@@ -30,28 +33,29 @@ public class ConnectionFactory {
    * @return a framed connection allowing clients to send binary data to a VAU and receive a binary
    *     response.
    */
-  public Connection connect(URI url) {
+  public HttpClient connect() {
 
     var client = new VauClientStateMachine(isPu);
 
-    var result = handshake(client, url);
+    var result = handshake(client);
 
-    return new Connection(outerClient, result.cid(), result.sessionUri(), client);
+    return new VauHttpClientImpl(
+        new Connection(outerClient, result.cid(), result.sessionUri(), client));
   }
 
   /** does the handshake to initialize the trusted environment */
-  private HandshakeResult handshake(VauClientStateMachine client, URI vauBaseUri) {
+  private HandshakeResult handshake(VauClientStateMachine client) {
 
     // handshake - start
     var msg1 = client.generateMessage1();
-    var msg2 = postMsg1(outerClient, vauBaseUri, msg1);
+    var msg2 = postMsg1(outerClient, vauUri, msg1);
 
     var cid = msg2.cid();
     validateCid(cid);
 
     var msg3 = client.receiveMessage2(msg2.body());
 
-    var sessionUri = vauBaseUri.resolve(cid);
+    var sessionUri = vauUri.resolve(cid);
 
     var msg4 = postCbor(outerClient, sessionUri, msg3).body();
 

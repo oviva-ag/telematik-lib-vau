@@ -10,6 +10,7 @@
   <modules>
     <module>httpclient</module>
     <module>lib</module>
+    <module>reverse-proxy</module>
   </modules>
 
   <properties>

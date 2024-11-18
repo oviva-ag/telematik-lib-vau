@@ -2,14 +2,13 @@ package com.oviva.telematik.vau.httpclient;
 
 import com.oviva.telematik.vau.httpclient.internal.ConnectionFactory;
 import com.oviva.telematik.vau.httpclient.internal.JavaHttpClient;
-import com.oviva.telematik.vau.httpclient.internal.VauHttpClientImpl;
 import java.net.URI;
 import java.time.Duration;
 
-public class VauHttpClientBuilder {
+public class VauClientFactoryBuilder {
 
-  public static VauHttpClientBuilder builder() {
-    return new VauHttpClientBuilder();
+  public static VauClientFactoryBuilder builder() {
+    return new VauClientFactoryBuilder();
   }
 
   private URI vauBaseUri;
@@ -19,19 +18,19 @@ public class VauHttpClientBuilder {
       new JavaHttpClient(
           java.net.http.HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build());
 
-  private VauHttpClientBuilder() {}
+  private VauClientFactoryBuilder() {}
 
-  public VauHttpClientBuilder outerClient(HttpClient outerClient) {
+  public VauClientFactoryBuilder outerClient(HttpClient outerClient) {
     this.outerClient = outerClient;
     return this;
   }
 
-  public VauHttpClientBuilder vauBaseUri(URI vauBaseUri) {
+  public VauClientFactoryBuilder vauBaseUri(URI vauBaseUri) {
     this.vauBaseUri = vauBaseUri;
     return this;
   }
 
-  public VauHttpClientBuilder environment(Environment environment) {
+  public VauClientFactoryBuilder environment(Environment environment) {
     this.environment = environment;
     return this;
   }
@@ -41,7 +40,7 @@ public class VauHttpClientBuilder {
    * href="https://gemspec.gematik.de/docs/gemSpec/gemSpec_Krypt/gemSpec_Krypt_V2.37.0/#7">gemSpec_Krypt</a>.
    * The {@link HttpClient} directly sends requests in the HTTP protocol through the VAU tunnel.
    */
-  public HttpClient build() {
+  public VauClientFactory build() {
 
     if (vauBaseUri == null) {
       throw new IllegalArgumentException("VAU base_uri missing");
@@ -51,15 +50,10 @@ public class VauHttpClientBuilder {
       throw new IllegalArgumentException("outer client missing");
     }
 
-    // does the VAU handshake and encapsulation
-    var conn =
-        new ConnectionFactory(outerClient, environment == Environment.PRODUCTION)
-            .connect(vauBaseUri);
-
-    return new VauHttpClientImpl(conn);
+    return new ConnectionFactory(outerClient, environment == Environment.PRODUCTION, vauBaseUri);
   }
 
-  enum Environment {
+  public enum Environment {
     TEST,
     REFERENCE,
     PRODUCTION

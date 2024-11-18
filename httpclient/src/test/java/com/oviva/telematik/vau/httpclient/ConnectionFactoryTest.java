@@ -2,7 +2,6 @@ package com.oviva.telematik.vau.httpclient;
 
 import com.oviva.telematik.vau.httpclient.internal.ConnectionFactory;
 import com.oviva.telematik.vau.httpclient.internal.JavaHttpClient;
-import com.oviva.telematik.vau.httpclient.internal.VauHttpClientImpl;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.security.Security;
@@ -24,10 +23,9 @@ class ConnectionFactoryTest {
     //    var vauUri = URI.create("https://e4a-rt.deine-epa.de/VAU");
     var vauUri = URI.create("http://localhost:8081/VAU");
 
-    var cf = new ConnectionFactory(new JavaHttpClient(HttpClient.newHttpClient()), false);
-    var conn = cf.connect(vauUri);
+    var cf = new ConnectionFactory(new JavaHttpClient(HttpClient.newHttpClient()), false, vauUri);
+    var httpClient = cf.connect();
 
-    var httpClient = new VauHttpClientImpl(conn);
     var res =
         httpClient.call(
             new com.oviva.telematik.vau.httpclient.HttpClient.Request(
